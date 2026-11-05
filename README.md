@@ -1,243 +1,151 @@
-# -Halcyrobe
 # Halcyrobe
 
-> AI-powered virtual try-on, fashion discovery, and shopping — in one place.
+Halcyrobe is a small ASP.NET Core API for fashion discovery and virtual try-on job orchestration. This first version is deliberately compact: it is intended to be understandable in a weekend while still demonstrating production-style C# structure, dependency injection, validation, tests, and API documentation.
 
-Halcyrobe is a fashion-tech application that helps users discover clothes, visualise how different pieces may look on them, and move directly from inspiration to purchase.
+The API does not call a real image-generation model yet. It provides the product catalogue and job boundary where a real provider can be connected later.
 
-Instead of treating virtual try-on as an isolated AI demo, Halcyrobe combines **multimodal AI, product discovery, brand browsing, saved looks, and shopping links** into a single consumer experience.
+## What works
 
----
+- Browse a seeded fashion catalogue.
+- Filter products by brand, category, and maximum price.
+- Fetch one product by ID.
+- Create a virtual try-on job for a product and person-image URL.
+- Retrieve a previously created job.
+- Reject unknown products and invalid image URLs with clear errors.
+- Run unit tests for filtering, validation, and job creation.
+- Explore the endpoints through Swagger in development.
 
-## ✨ Product Vision
-
-Online fashion shopping still has a major gap between:
-
-**seeing a product**  
-→ **imagining yourself wearing it**  
-→ **deciding whether it fits your style**  
-→ **finding where to buy it**
-
-Halcyrobe is designed to shorten that journey.
-
-Users can:
-
-- explore fashion items and brands
-- upload or select a personal image
-- generate AI-assisted virtual try-on previews
-- compare different looks
-- save favourite outfits
-- browse product details
-- follow shopping links to retailers or official brand websites
-
-The long-term goal is to build an intelligent fashion layer between **discovery, visualisation, styling, and commerce**.
-
----
-
-## 🧭 Core User Flow
+## Project structure
 
 ```text
-Discover
-   ↓
-Select a garment
-   ↓
-Upload / choose a photo
-   ↓
-Generate virtual try-on
-   ↓
-Review the look
-   ↓
-Save / compare
-   ↓
-Shop
+Halcyrobe.sln
+src/Halcyrobe.Api/
+  Contracts/       HTTP request and response shapes
+  Models/          Core product and try-on data
+  Services/        Interfaces and in-memory implementations
+  Program.cs       Dependency injection and HTTP endpoints
+tests/Halcyrobe.Api.Tests/
+  ProductCatalogTests.cs
+  TryOnJobServiceTests.cs
+```
 
-🛍️ Key Features
+The separation is intentional:
 
-Virtual Try-On
+- `Models` describe the data the application works with.
+- `Contracts` describe what clients send to and receive from the API.
+- `Services` contain application behaviour behind interfaces.
+- `Program.cs` connects HTTP routes to those services.
+- `Tests` call the services directly, so the business behaviour is easy to understand.
 
-Users can generate a visual preview of selected garments on their own image using multimodal or specialised virtual try-on models.
+## Run locally
 
-Planned capabilities include:
+Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), then run:
 
-* garment-aware image generation
-* body and pose preservation
-* face preservation
-* colour and texture consistency
-* multiple generation providers
-* retry and fallback handling
-* generation history
+```bash
+dotnet restore
+dotnet run --project src/Halcyrobe.Api
+```
 
-Fashion Discovery
+Open the Swagger page shown in the terminal, usually:
 
-Users can browse and discover products across different brands and retailers.
+```text
+http://localhost:5132/swagger
+```
 
-Possible discovery dimensions include:
+Run the tests:
 
-* brand
-* category
-* style
-* colour
-* occasion
-* season
-* price range
+```bash
+dotnet test
+```
 
-Product & Brand Pages
+## Try the API
 
-Each product can include:
+List all products:
 
-* brand
-* product name
-* category
-* description
-* price
-* currency
-* available sizes
-* product imagery
-* retailer
-* shopping URL
-* affiliate URL
-* availability status
+```bash
+curl http://localhost:5132/api/products
+```
 
-Saved Looks
+Filter the catalogue:
 
-Users can save generated try-on results and build a personal collection of looks.
+```bash
+curl "http://localhost:5132/api/products?category=Jacket&maxPrice=150"
+```
 
-Future versions may support:
+Copy a product ID from the response, then create a try-on job:
 
-* outfit boards
-* wardrobe collections
-* favourites
-* side-by-side comparison
-* personalised recommendations
-* styling history
+```bash
+curl -X POST http://localhost:5132/api/try-ons \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "11111111-1111-1111-1111-111111111111",
+    "personImageUrl": "https://example.com/person.jpg"
+  }'
+```
 
-Shopping Links
+The response has a `jobId`. Retrieve it with:
 
-Halcyrobe connects fashion discovery with external commerce.
+```bash
+curl http://localhost:5132/api/try-ons/JOB_ID
+```
 
-Potential integrations include:
+## The C# concepts to learn
 
-* official brand stores
-* department stores
-* fashion marketplaces
-* affiliate networks
-* retailer APIs
+### 1. Records and enums
 
-┌─────────────────────────────┐
-│       Client Application    │
-│     Next.js / SwiftUI       │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│      ASP.NET Core API       │
-│                             │
-│  Auth                       │
-│  Product Service            │
-│  Brand Service              │
-│  Try-On Service             │
-│  Saved Looks Service        │
-│  Shopping Link Service      │
-│  Recommendation Service     │
-└───────┬─────────┬───────────┘
-        │         │
-        │         └──────────────────┐
-        ▼                            ▼
-┌───────────────┐           ┌─────────────────┐
-│  PostgreSQL   │           │ Object Storage  │
-│               │           │ Images / Assets │
-└───────────────┘           └─────────────────┘
-        │
-        ▼
-┌─────────────────────────────┐
-│      AI / Vision Layer      │
-│                             │
-│ Virtual Try-On Provider     │
-│ Multimodal Vision Model     │
-│ Recommendation Models       │
-└─────────────────────────────┘
+`Product` and `TryOnJob` are records: concise immutable data types. `TryOnStatus` is an enum, so job state cannot be an arbitrary string.
 
-🧰 Tech Stack
+### 2. Interfaces and dependency injection
 
-Backend
+`IProductCatalog` and `ITryOnJobService` describe behaviour without choosing an implementation. `Program.cs` registers their in-memory implementations. ASP.NET Core supplies those services to each endpoint.
 
-* C#
-* ASP.NET Core
-* Entity Framework Core
-* PostgreSQL
-* REST APIs
-* OpenAPI / Swagger
+### 3. LINQ
 
-Frontend
+`InMemoryProductCatalog` uses LINQ to apply optional filters. Read the method from top to bottom and observe how each filter adds a new condition.
 
-Planned:
+### 4. Validation and explicit results
 
-* Next.js
-* TypeScript
+`InMemoryTryOnJobService.Create` returns `TryOnJobCreationResult` rather than throwing for expected user errors. The endpoint converts success into HTTP 201 and validation failures into HTTP 400 or 404.
 
-Future mobile client:
+### 5. Unit tests
 
-* SwiftUI
+The tests use Arrange, Act, Assert:
 
-AI
+1. Arrange the service and input.
+2. Act by calling one method.
+3. Assert the returned value or error.
 
-Planned integrations may include:
+## A weekend learning plan
 
-* multimodal vision models
-* virtual try-on APIs
-* image generation models
-* embedding-based product recommendations
-* LLM-powered styling assistance
+### Saturday morning
 
-Infrastructure
+1. Run the API and open Swagger.
+2. Read `Program.cs` and call each endpoint.
+3. Set a breakpoint in one endpoint and follow the request into a service.
 
-Planned:
+### Saturday afternoon
 
-* Docker
-* object storage
-* cloud deployment
-* CI/CD
-* structured logging
-* monitoring
+1. Read the models and service interfaces.
+2. Add a fourth sample product.
+3. Add a `colour` filter to `IProductCatalog` and its tests.
 
-⸻
+### Sunday morning
 
-⚙️ Backend Design
+1. Read the try-on service and its tests.
+2. Explain why the existing validation rejects `file:` URLs as well as malformed text.
+3. Add an image-file extension rule by writing a failing test first, then make the test pass.
 
-Halcyrobe uses ASP.NET Core as the main application backend.
+### Sunday afternoon
 
-The backend is responsible for:
+1. Replace one in-memory collection with a repository interface.
+2. Explain aloud why the endpoint depends on an interface.
+3. Write down how a real AI provider, database, retry policy, and background worker would fit without changing the HTTP contract.
 
-* authentication and user management
-* product and brand data
-* product listings
-* image metadata
-* virtual try-on job orchestration
-* external AI provider integration
-* saved looks
-* shopping links
-* recommendation data
-* logging and observability
+## Current limitations
 
-Machine-learning inference can remain separate from the main application layer.
+- Data is held in memory and resets when the API restarts.
+- Try-on jobs remain queued; no external AI provider is called.
+- Authentication, persistent storage, file uploads, and rate limits are intentionally out of scope.
 
-For locally hosted or Python-native models, Halcyrobe may use a dedicated inference service:
-
-ASP.NET Core
-      ↓
-AI Orchestration Layer
-      ↓
-Python / FastAPI ML Service
-      ↓
-Virtual Try-On Model
-
-This keeps the product backend independent from the machine-learning runtime while allowing the system to use the strongest ecosystem for each responsibility.
-
-⸻
-
-🔄 Asynchronous Try-On Jobs
-
-Virtual try-on generation may take several seconds or longer.
-
-Instead of keeping a single HTTP request open for the entire inference process, Halcyrobe can use an asynchronous job model.
+These are deliberate boundaries, not hidden unfinished work. A sensible next step is to add a provider interface and background worker, then persist products and jobs with Entity Framework Core and PostgreSQL.
 
